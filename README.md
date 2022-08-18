@@ -7,3 +7,7 @@ MultiABLER is a set of R functions forms a seamless workflow that supports integ
 * [ProteoMM](https://www.bioconductor.org/packages/release/bioc/html/ProteoMM.html)
 * [limma](https://www.bioconductor.org/packages/release/bioc/html/limma.html)
 * [Tidyverse](https://www.tidyverse.org)
+
+## License
+
+MIT
