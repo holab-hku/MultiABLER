@@ -7,7 +7,7 @@ https://htmlpreview.github.io/?https://github.com/holab-hku/MultiABLER/blob/main
 
 To install via github, run the following code in R:
 
-`devtools::install_github("holab-hku/MultiABLER")`
+`devtools::install_github("holab-hku/MultiABLER", dependencies = TRUE)`
 
 ## Installation issues
 
