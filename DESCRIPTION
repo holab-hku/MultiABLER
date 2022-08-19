@@ -1,7 +1,7 @@
 Package: MultiABLER
 Type: Package
 Title: LC-MS analytic pipeline for Multi-ABLE
-Authors@R: person("Ian", "Lee", email = "ichlee@connect.hku.hk", role = c("aut", "cre"))
+Authors: University of Hong Kong
 Description: Analytical pipeline functions for Multi-ABLE Lx and Mx dual extraction LC-MS analysis.
 Version: 1.0.0
 License: MIT + file LICENSE
