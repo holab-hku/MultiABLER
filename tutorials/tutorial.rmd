@@ -1,0 +1,290 @@
+---
+title: "Analytical Pipeline for LC-MS/MS Metabolomic Studies"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Analytical Pipeline for LC-MS/MS Metabolomic Studies}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+jupyter:
+  celltoolbar: Tags
+  kernelspec:
+    display_name: R 4.1.0
+    language: R
+    name: ir410
+  language_info:
+    codemirror_mode: r
+    file_extension: .r
+    mimetype: text/x-r-source
+    name: R
+    pygments_lexer: r
+    version: 4.1.0
+  nbformat: 4
+  nbformat_minor: 5
+  toc-autonumbering: false
+  toc-showcode: true
+  toc-showmarkdowntxt: false
+  toc-showtags: false
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, echo = FALSE}
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(fig.width=16, fig.height=8, out.width="100%")
+
+```
+
+## Packages dependencies
+
+MultiABLER is dependent on the following packages:
+
+-   [ProteoMM](https://www.bioconductor.org/packages/release/bioc/html/ProteoMM.html)
+-   [limma](https://www.bioconductor.org/packages/release/bioc/html/limma.html)
+
+We would also use [tidyverse](https://www.tidyverse.org) will be used to
+manipulate the dataframe and
+[cowplot](https://wilkelab.org/cowplot/index.html) will be used for
+plotting the figures.
+
+Guides to install these packages can be found in the package's page.
+
+```{r}
+library(cowplot)
+library(tidyverse)
+library(MultiABLER)
+```
+
+## Data Preprocessing
+
+LC-MS data preprocessing was performed with [XCMS
+online](https://xcmsonline.scripps.edu/landing_page.php?pgcontent=mainPage)
+and
+[LipidFinder](https://www.lipidmaps.org/resources/tools/lipidfinder/).
+While XCMS is available via R, we used XCMS online to analyse the LC-MS
+data to reduce strain on the local server. XCMS is used to perform peak
+finding and feature alignment. We used the settings that are catered for
+our vendor on XCMS. The xcms output can be found in `demo_data`.
+
+After data preprocessing with XCMS, LipidFinder was used to normalise
+the data based on the blank solvent control. Lipidfinder is available
+both online and as python code. Instruction on installing the python
+code can be found in
+[here](https://github.com/ODonnell-Lipidomics/LipidFinder). The
+`peakfilter` filter module was used to filter the XCMS peaks. Parameters
+for the module is setup using the `config_params.py` as described in the
+instruction of LipidFinder. The parameter json file can also be found in
+`demo_data`.
+
+`> run_peakfilter.py -i demo_data/Lx_pos.csv -o LipidFinder_lx_results -p demo_data/param.filter.demo.pos.json`
+
+`> run_peakfilter.py -i demo_data/Lx_neg.csv -o LipidFinder_lx_results -p demo_data/param.filter.demo.neg.json`
+
+`> run_peakfilter.py -i demo_data/Mx_pos.csv -o LipidFinder_mx_results -p demo_data/param.filter.demo.pos.json`
+
+`> run_peakfilter.py -i demo_data/Mx_neg.csv -o LipidFinder_mx_results -p demo_data/param.filter.demo.neg.json`
+
+After the clean up using LipidFinder, the data is imported to MultiABLER
+for further processing. We use the `read_LipidFindre_csv` function to
+read the LipidFinder filtered result into MultiABLER. The omic argument
+is used to tag whether the feature table is lipidomic (Lx) or
+metabolomic (Mx). The file should be the output from LipidFinder,
+including a column for "Polarity". The `read_LipidFinder_csv` would read
+and format the feature table. We can then use the `bind_rows` function
+from `dplyr` (part of `tidyverse`) to join the four feature tables.
+
+```{r, message=FALSE}
+lx_neg <- read_LipidFinder_csv("LipidFinder_lx_results/peakfilter_negative_summary.csv", omic = "Lx")
+lx_pos <- read_LipidFinder_csv("LipidFinder_lx_results/peakfilter_positive_summary.csv", omic = "Lx")
+mx_neg <- read_LipidFinder_csv("LipidFinder_mx_results/peakfilter_negative_summary.csv", omic = "Mx")
+mx_pos <- read_LipidFinder_csv("LipidFinder_mx_results/peakfilter_positive_summary.csv", omic = "Mx")
+
+lipidFinder.data <- bind_rows(lx_neg, lx_pos, mx_neg, mx_pos)
+head(lipidFinder.data)
+```
+
+## Analytical Pipeline in MultiABLER
+
+After the data is imported, we can first extract the feature table from
+the additional information. We will then use the `tbManipulate` function
+of `MultiABLER` to filter, impute and transform the feature table. We
+will also read in the sample information provided in `demo_data`.
+
+```{r, message=FALSE}
+lipidFinder.data <- lipidFinder.data %>% na_if(0)
+feature.info <- lipidFinder.data %>% select(Omic, Polarity, FeatureID, mzmed, rtmed)
+feature.df <- lipidFinder.data %>% select(-mzmed, -rtmed)
+sample.info <- read_csv("demo_data/sample.info.csv")
+
+head(feature.df)
+```
+
+Data processing in the `tbManipulate` function includes filtering,
+missing value imputation, and logarithmic transformation.
+
+#### Filtering
+
+The first step in the data preprocessing is feature filtering. There are
+multiple method for data filtering that are commonly used, such as
+filtering the features by missing values and by the mean abundance of
+the features. Here, we use a missing value threshold of 3 to filter the
+data. We would remove any features that has less than 3 values. While
+the threshold is an arbitually selected number, we use this threshold to
+maximise the number of features found in the dataset without affecting
+the normalisation algorithm. The filter threshold can be set in the
+argument `filter_threshold`.
+
+#### Missing Value Imputation
+
+For missing value imputation, we use the global minimum method. All
+missing values are imputed with half of the global minimum. This is to
+provide a small value to the missing values so that the normalisation
+algorithm may run without drastically affecting the data shape.
+Imputation implemented includes using half of the global minimum
+("gm2"), and a fifth of the global minimum("gm5"). The argument can be
+set in the field `impute`.
+
+#### Logarithmic transformation
+
+Finally, we transformed the data with log base 2. Base 2 is used here so
+that in subsequent differential analysis, a fold change of 1 represents
+a 2-fold change. The log base can be changed using the argument
+`log_base`.
+
+We use the `group_by` function and the `group_modify` function in
+`dplyr` to pre-process all four table at once.
+
+```{r}
+mani.df <- feature.df %>% group_by(Omic, Polarity) %>% group_modify(~tbManipulate(.x, 3))
+head(mani.df)
+```
+
+## Data Normalisation
+
+For data normalisation, we used EigenMS, which is implemented by the R
+package `ProteoMM`. EigenMS is a normalisation algorithm that uses
+single value decomposition (SVD) to remove systematic bias from LC-MS
+experimetal runs based on the experimental group of the samples. It is
+useful for experimental design that includes multiple sample groups, as
+it normalises the sample across the dataset, while retaining the
+differences between treatment groups.
+
+To run EigenMS, we would use the `eig_norm1` and `eig_norm2` function in
+the `ProteoMM` package.
+
+```{r, echo=FALSE}
+theme_update(title = element_text(size = 20), 
+             axis.text = element_text(size = 15), 
+             legend.text = element_text(size = 15),
+            strip.text = element_text(size = 15))
+set.seed(200)
+```
+
+```{r, warning=FALSE, message=FALSE, fig.show='hide', fig.keep = 'none'}
+eigenMS.df <- mani.df %>% group_modify(~normEigenMS(.x, rename(sample.info, group = Label)))
+head(eigenMS.df)
+```
+
+We can use the box plot and PCA plot to evaluate the normalisation of
+the data. After EigenMS normalisation, the sample is normalised across
+the sample within each tissue group, and PCA result shows that the
+difference between different tissue group is retained. Noticeably, while
+EigenMS takes the tissue group into account during normalisation, no
+extra information regarding the treatment is provided. However, the
+normalised result shows the plaque data (stable plaque and unstable
+plaque) are closer to each other than the leison-free data, suggesting
+the difference between the grouping is real.
+
+```{r}
+p1 <- stack(mani.df %>% ungroup() %>% select(-Omic, -Polarity, -FeatureID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
+ggplot(aes(x = ind, y = values, color = Label)) + geom_boxplot() +
+ggtitle("Before normalisation") + theme(axis.text.x = element_blank()) + xlab("sample")
+p2 <- stack(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity, -FeatureID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
+ggplot(aes(x = ind, y = values, color = Label)) + geom_boxplot() +
+ggtitle("After normalisation") + theme(axis.text.x = element_blank()) + xlab("sample")
+
+cowplot::plot_grid(p1, p2, nrow = 1)
+```
+
+```{r}
+before.norm <- prcomp(t(mani.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("FeatureID")), scale = TRUE)
+after.norm <- prcomp(t(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("FeatureID")), scale = TRUE)
+
+before.norm.df <- data.frame(before.norm$x)
+before.norm.df$sample <- rownames(before.norm.df)
+
+after.norm.df <- data.frame(after.norm$x)
+after.norm.df$sample <- rownames(after.norm.df)
+
+p1 <- before.norm.df %>% inner_join(sample.info, by = "sample") %>% ggplot(aes(PC1, PC2, color = Label)) +
+geom_point() + stat_ellipse() + ggtitle("Before normalisation")
+p2 <- after.norm.df %>% inner_join(sample.info, by = "sample") %>% ggplot(aes(PC1, PC2, color = Label)) +
+geom_point() + stat_ellipse() + ggtitle("After normalisation")
+
+cowplot::plot_grid(p1, p2, nrow = 1)
+```
+
+Although EigenMS normalisation normalise the sample within the tissue
+group, it does not standardise the overall feature table to the same
+median. Therefore, we further standardise the range of the sample to the
+same median so that we can compare the value across different samples.
+
+```{r}
+eigenMS.median.df <- eigenMS.df %>% group_modify(~normMedian(.x))
+head(eigenMS.median.df)
+```
+
+## Feature Annotation
+
+Feature annotation are typically performed based on the feature table
+optained from data preprocessor such as XCMS and MS-DIAL. There are many
+stand-alone metabolomic feature annotation available, however often not
+compatible with R. Some feature annotation programmes includes OpenMS
+(Röst et al., 2016), SIRIUS and CSI:FingerID (Rurik et al., 2020).
+However, while having a stand-alone annotation programme limits the
+ability of running a workflow on an unified pipeline, this also provides
+a greater flexibility in analysing the dataset, and matching the
+annotation programme that is suitable for the dataset. Here, we use
+[LipidMatch](https://innovativeomics.com/software/lipidmatch-modular-annotates-a-feature-table/)
+to annotate the lipidomic data. The lipidomic annotation can be found in
+`demo_data`. However, we are unable to annotate the differentially
+expressed metabolomic features.
+
+```{r, message=FALSE}
+lx.annotation <- read_csv("demo_data/Lx.annotation.csv")
+head(lx.annotation)
+```
+
+## Statistical analysis
+
+Statistical analysis is performed on the normalised feature table. Here,
+we presented differential analysis using the `limma` package. However,
+there are other statistical analysis could be performed, such as network
+analysis and marker identification, with the annotated normalised
+feature table.
+
+```{r}
+label <- as.factor(sample.info$Label)
+design <- model.matrix(~ label)
+colnames(design)[1] <- "Intercept"
+
+cont.matrix <- limma::makeContrasts(NLvL = -labelNL, levels = design)
+
+limma.result <- eigenMS.median.df %>% group_by(Omic, Polarity) %>% group_modify(~runLimma(.x, design.matrix = design, cont.matrix = cont.matrix)) %>% ungroup()
+head(limma.result)
+```
+
+Finally, we can plot the differential analysis result using the output
+from Limma.
+
+```{r}
+limma.result %>% ggplot(aes(logFC.NLvL, -log10(adj.P.Val.NLvL))) + geom_point() + facet_wrap(~Omic) +
+xlab("logFC") + ylab("-log10(p)") + geom_hline(yintercept = -log10(0.05), lty = "dashed") +
+geom_vline(xintercept = c(-1,1), lty = "dashed") +
+ggtitle("Differential analysis")
+```
+
+## Session Info
+```{r}
+sessionInfo()
+```

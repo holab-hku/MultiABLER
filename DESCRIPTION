@@ -1,0 +1,11 @@
+Package: MultiABLER
+Type: Package
+Title: LC-MS analytic pipeline for Multi-ABLE
+Authors@R: person("Ian", "Lee", email = "ichlee@connect.hku.hk", role = c("aut", "cre"))
+Description: Analytical pipeline functions for Multi-ABLE Lx and Mx dual extraction LC-MS analysis.
+Version: 1.0.0
+License: MIT + file LICENSE
+Depends: R (>= 4.0)
+Imports: tidyverse (>= 1.3.0), ProteoMM, limma
+RoxygenNote: 7.1.1
+Encoding: UTF-8
