@@ -5,6 +5,146 @@ library(xcms)
 library(CAMERA)
 library(metid)
 
+runXCMS <- function (mzMLs, 
+                     sample.info, 
+                     polarity, 
+                     save.xdata = FALSE, 
+                     save.location = NA, 
+                     cwp = NA, 
+                     owp = NA, 
+                     pdp = NA,
+                     camera.sigma = 6,
+                     camera.perfwhm = 0.6,
+                     camera.intval = "into", 
+                     camera.ppm = 10,
+                     camera.mzabs = 0.015,
+                     camera.maxcharge = 3,
+                     camera.maxiso = 5
+) {
+  if (is.na(cwp)) {
+    cwp <- CentWaveParam(ppm = 10,
+                         snthr = 6,
+                         peakwidth = c(10, 60), 
+                         mzdiff = 0.01,
+                         noise = 0,
+                         prefilter = c(3, 500))
+  } else if (!isClass(cwp, "CentWaveParam")) {
+    stop("cwp must be class CentWaveParam!")
+  }
+  
+  if (is.na(owp)) {
+    owp <- ObiwarpParam(binSize = 0.5)
+  } else if (!isClass(owp, "ObiwarpParam")) {
+    stop("owp must be class ObiwarpParam!")
+  }
+  
+  if(is.null(sample.info$group)) {
+    stop("sample.info must contain column `group`!")
+  }
+  
+  if (is.na(pdp)) {
+    pdp <- PeakDensityParam(sampleGroups = sample.info$group,
+                            bw = 5,
+                            binSize = 0.025,
+                            minFraction = 0.5,
+                            minSamples = 1)
+  } else if (!isClass(pdp, "PeakDensityParam")) {
+    stop("pdp must be class PeakDensityParam!")
+  }
+  
+  if(save.xdata && is.na(save.location)) {
+    stop("`save.xdata`` is set but no location is found. Please provide location at `save.location`.")
+  } else if (save.xdata) {
+    if (file.exists(save.location)) {
+      loop <- TRUE
+      continue_script <- FALSE
+      while(loop) {
+        rl <- readline(prompt="Warning: directory already exists. Proceed and overwrite existing xdata? [y/n]") 
+        if (tolower(rl) == "y") {
+          continue_script <- TRUE
+          loop <- FALSE
+        } else if (tolower(tl == "n")) {
+          continue_script <- FALSE
+          loop <- FALSE
+        } else {
+          loop <- TRUE
+        }
+      }
+      if (!continue_script) {
+        stop("Manual stop because directory already exists.")
+      }
+    } else {
+      dir.create(save.location, recursive = TRUE)
+    }
+  }
+  
+  raw_data <- readMSData(files = mzMLs, pdata = new("NAnnotatedDataFrame", sample.info), mode = "onDisk")
+  
+  xdata <- findChromPeaks(raw_data, param = cwp)
+  xdata2 <- adjustRtime(xdata, param = owp)
+  xdata3 <- groupChromPeaks(xdata2, param = pdp)
+  
+  if (save.xdata) {
+    xdata.path <- file.path(save.location, "xdata.Rdata")
+    xdata2.path <- file.path(save.location, "xdata2.Rdata")
+    xdata3.path <- file.path(save.location, "xdata3.Rdata")
+    
+    save(xdata, file = xdata.path)
+    save(xdata2, file = xdata2.path)
+    save(xdata3, file = xdata3.path)
+  }
+  
+  primary_adducts <- paste0("rules/primary_adducts_", str_extract(polarity, "^.{3}"),".csv")
+  xsa <- xsAnnotate(as(filterMsLevel(xdata3, msLevel. = 1), "xcmsSet"), polarity = polarity)
+  anF <- groupFWHM(xsa, sigma = camera.sigma, perfwhm = camera.perfwhm, intval = camera.intval)
+  anI <- findIsotopes(anF, ppm = camera.ppm, mzabs = camera.mzabs, maxcharge = camera.maxcharge, maxiso = camera.maxiso, intval = camera.intval)
+  anIC <- groupCorr(anI)
+  anFA <- findAdducts(anIC, polarity=polarity, rules = read.csv(system.file(primary_adducts, package = "CAMERA")))
+  peaklist <- getPeaklist(anFA)
+  rownames(peaklist) <- rownames(featureDefinitions(xdata3))
+  
+  xdata.table <- featureValues(xdata3) %>% as_tibble(rownames = "Feature.ID")
+  xdata.table <- xdata.table %>% pivot_longer(-Feature.ID) %>% mutate(name = str_remove(name, pattern = ".mzML")) %>% pivot_wider()
+  xdata.ftInfo <- featureDefinitions(xdata3) %>% as_tibble(rownames = "Feature.ID")
+  camera.table <- peaklist %>% as_tibble(rownames = "Feature.ID")
+  annotated.table <- xdata.ftInfo %>% select(Feature.ID, mzmed, rtmed) %>% inner_join(xdata.table, by = "Feature.ID") %>%
+    inner_join(camera.table %>% select(Feature.ID, isotopes, adduct, pcgroup), by = "Feature.ID") %>%
+    select(Feature.ID, mzmed, rtmed, sample.info %>% filter(group == "sample") %>% .$file,
+           sample.info %>% filter(group == "blank") %>% .$file, isotopes, adduct, pcgroup)
+  
+  return(annotated.table)
+  
+}
+
+metid_annotate <- function (df, polarity, omic = "Mx") {
+  load("database.RData")
+  database <- if (tolower(omic) == "lx") hmdb_lipids_metid else hmdb_metabo_metid
+  tmp_file <- tempfile("metid", fileext = ".csv")
+  for.metid.file <- basename(tmp_file)
+  df %>% select(Feature.ID, mz, rt) %>% write_csv(tmp_file)
+  
+  annotate_result <- metid::identify_metabolites(
+    ms1.data = for.metid.file,
+    ms1.match.ppm = 15, 
+    rt.match.tol = 1000000,
+    path = tempdir(),
+    polarity = polarity,
+    database = database
+  )
+  
+  annotate_table <- annotate_result %>% get_identification_table(type = "new", candidate.num = 1) %>% rename(FeatureID = name)
+  
+  return (annotate_table)
+}
+
+write_lipidfinder_csv <- function(df, file.name) {
+  lf_output <- df %>% replace(is.na(.), 0) %>%
+    mutate(Feature.ID = as.numeric(str_replace(Feature.ID, "FT", ""))) %>%
+    rename(FeatureID = Feature.ID)
+  
+  write_csv(lf_output, file = file.name)
+}
+
 #' Read csv files from LipidFinder output
 #'
 #' Convert LipidFinder output into a dataframe
