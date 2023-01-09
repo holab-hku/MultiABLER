@@ -1,6 +1,9 @@
 library(tidyverse)
 library(limma)
 library(ProteoMM)
+library(xcms)
+library(CAMERA)
+library(metid)
 
 #' Read csv files from LipidFinder output
 #'
