@@ -53,6 +53,7 @@ Guides to install these packages can be found in the package's page.
 library(cowplot)
 library(tidyverse)
 library(MultiABLER)
+sysmet('pip install LipidFinder-2.0.2-py3-none-any.whl')
 ```
 
 ## Data Preprocessing
@@ -68,13 +69,20 @@ our vendor on XCMS. The xcms output can be found in `demo_data`.
 
 After data preprocessing with XCMS, LipidFinder was used to normalise
 the data based on the blank solvent control. Lipidfinder is available
-both online and as python code. Instruction on installing the python
+both online and as python code, and via a simple R wrapper here. Instruction on installing the python
 code can be found in
 [here](https://github.com/ODonnell-Lipidomics/LipidFinder). The
 `peakfilter` filter module was used to filter the XCMS peaks. Parameters
 for the module is setup using the `config_params.py` as described in the
 instruction of LipidFinder. The parameter json file can also be found in
 `demo_data`.
+
+```{r, message=FALSE}
+run_lipidfinder(input='demo_data/Lx_pos.csv', output='LipidFinder_lx_results', json_param='demo_data/param.filter.demo.pos.json')
+run_lipidfinder(input='demo_data/Lx_neg.csv', output='LipidFinder_lx_results', json_param='demo_data/param.filter.demo.neg.json')
+run_lipidfinder(input='demo_data/Mx_pos.csv', output='LipidFinder_mx_results', json_param='demo_data/param.filter.demo.pos.json')
+run_lipidfinder(input='demo_data/Mx_neg.csv', output='LipidFinder_mx_results', json_param='demo_data/param.filter.demo.neg.json')
+```
 
 `> run_peakfilter.py -i demo_data/Lx_pos.csv -o LipidFinder_lx_results -p demo_data/param.filter.demo.pos.json`
 
