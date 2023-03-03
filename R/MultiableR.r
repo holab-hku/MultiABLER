@@ -198,6 +198,16 @@ write_lipidfinder_csv <- function(df, file.name) {
   readr::write_csv(lf_output, file = file.name)
 }
 
+#' LipidFinder wrapper (check/install and run)
+#' @param input The input file location (output from write_lipidfinder_csv)
+#' @param output The output file location (input to read_LipidFinder_csv)
+#' @param json_param The requisite json parameter file 
+#' @export
+run_lipidfinder <- function(input, output, json_param) {
+# system('python -m pip install --upgrade LipidFinder-2.0.2-py3-none-any.whl')
+system('python run_peakfilter.py -i 'input' -o 'output' -p 'json_param'')
+}
+
 #' Read csv files from LipidFinder output
 #'
 #' Convert LipidFinder output into a dataframe
