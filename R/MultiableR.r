@@ -337,6 +337,14 @@ runLimma <- function(df, design.matrix, cont.matrix) {
 }
 
 #' @export
+rename_annotation_feature <- function(annotated.df, omic, polarity) {
+  rename.df <- annotated.df %>% mutate(Omic = omic, Polarity = polarity, Feature.ID = str_replace(
+    Feature.ID, "FT", paste0(stringr::str_extract(Omic, "^(.)"),
+                             stringr::str_extract(Polarity, "^(.)"))))
+  return(rename.df)
+}
+
+#' @export
 group_annotation <- function(df, annotated.df, match.id = "HMDB.ID") {
   if (!(match.id %in% colnames(annotated.df))) {
     stop(paste0("Column `", match.id, "` not found in annotation dataframe!"))
