@@ -39,6 +39,9 @@ knitr::opts_chunk$set(fig.width=16, fig.height=8, out.width="100%")
 
 MultiABLER is dependent on the following packages:
 
+-   [xcms](https://www.bioconductor.org/packages/release/bioc/html/xcms.html)
+-   [CAMERA](https://www.bioconductor.org/packages/release/bioc/html/CAMERA.html)
+-   [metid](https://metid.tidymass.org)
 -   [ProteoMM](https://www.bioconductor.org/packages/release/bioc/html/ProteoMM.html)
 -   [limma](https://www.bioconductor.org/packages/release/bioc/html/limma.html)
 
@@ -47,26 +50,111 @@ manipulate the dataframe and
 [cowplot](https://wilkelab.org/cowplot/index.html) will be used for
 plotting the figures.
 
-Guides to install these packages can be found in the package's page.
+Guides to install these packages can be found in the package's page. However, MultiABLER is also able to install the above packages automatically.
 
 ```{r}
 library(cowplot)
 library(tidyverse)
 library(MultiABLER)
+system('pip install LipidFinder-2.0.2-py3-none-any.whl')
 ```
+
+## Data
+
+Data used in this tutorial is collected from Talib et al.[1].
+The data can be find at the [EMBL-EBI Biostudies repository S-BSST1039](https://www.ebi.ac.uk/biostudies/studies/S-BSST1039).
+Analysed data can also be found in the demo data folder.
 
 ## Data Preprocessing
 
-LC-MS data preprocessing was performed with [XCMS
-online](https://xcmsonline.scripps.edu/landing_page.php?pgcontent=mainPage)
-and
-[LipidFinder](https://www.lipidmaps.org/resources/tools/lipidfinder/).
-While XCMS is available via R, we used XCMS online to analyse the LC-MS
-data to reduce strain on the local server. XCMS is used to perform peak
-finding and feature alignment. We used the settings that are catered for
-our vendor on XCMS. The xcms output can be found in `demo_data`.
+TO process the data, raw LC-MS file is first converted into mzML using MSconvert.
+LC-MS data preprocessing was performed with XCMS and CAMERA. To start analysis,
+we first read in the location, sample information, and mzML file location. Here,
+we use the lipidomic (Lx) positive mode as an example.
+```{r info eval=FALSE}
+data_dir = file.path("Talib_et_al")
+sample.info = read_csv(file.path(data_dir, "sample.info.csv"))
+mzML_dir = file.path(data_dir, "mzML")
 
-After data preprocessing with XCMS, LipidFinder was used to normalise
+mzMLs = list.files(mzML_dir, full.names = TRUE, pattern = ".mzML")
+```
+
+XCMS requires three parameters to perform alignment: CentWaveParam, ObiwarpParam,
+and PeakDensityParam. User may define their own XCMS parameters, or the following
+parameters is build-in with the pipeline.
+
+```{r xcms-params}
+cwp <- CentWaveParam(ppm = 10,
+                           snthr = 6,
+                           peakwidth = c(10, 60), 
+                           mzdiff = 0.01,
+                           noise = 0,
+                           prefilter = c(3, 500))
+
+owp <- ObiwarpParam(binSize = 0.5)
+
+pdp <- PeakDensityParam(sampleGroups = sample.info$group,
+                        bw = 5,
+                        binSize = 0.025,
+                        minFraction = 0.5,
+                        minSamples = 1)
+```
+
+To run XCMS, we use the function `runXCMS`. User may choose to save the XCMS xdata
+with the parameter `save.xdata` (default is `FALSE`), with a provided save location.
+As mentioned above, the XCMS parameters can also be omited and the above parameters
+will be used for XCMS alignment.
+
+This function will also runs CAMERA annotation, providing a full XCMS and CAMERA annotated
+table as output. The following parameters is our default settings, but user may change
+the parameters to adjust for their data. `camera.sigma`, `camera.perfwhm` 
+and `camera.intval` is used in the function `CAMERA::groupFWHM`.
+`camera.intval`,`camera.ppm`,`camera.mzabs`,`camera.maxcharge`, and `camera.maxiso`
+are used in the function `CAMERA::findIsotopes`.
+```{r xcms eval=FALSE}
+xcms.table <- runXCMS(mzMLs, 
+                      sample.info = sample.info, 
+                      polarity = "positive", 
+                      pdp = pdp,
+                      cwp = cwp,
+                      owp = owp,
+                      save.location = file.path(mzML_dir, "xdata")
+                      save.xdata = TRUE,
+                      camera.sigma = 6,
+                      camera.perfwhm = 0.6,
+                      camera.intval = "into", 
+                      camera.ppm = 10,
+                      camera.mzabs = 0.015,
+                      camera.maxcharge = 3,
+                      camera.maxiso = 5
+                      )
+```
+
+After xcms alignment, we can use the function `write_lipidfinder_csv` to
+save a csv for LipidFinder.
+```{r write-lipidfinder eval=FALSE}
+write_lipidfinder_csv(xcms.table, file.path(data_dir, "Lx_pos.csv"))
+```
+
+## Feature Annotation with metID
+
+Feature annotation is performed using metID with the function `metid_annotate`.
+Feature table is annotated using the function `metid::identify_metabolites`.
+Two database is included in our package for metabolites and lipids. Both are molecules
+identified in the Human Metabolome Database (HMDB). User may use the parameters
+`ms1.match.ppm` and `rt.match.tol` to modifiy the annotation parameters.
+
+```{r, eval=FALSE}
+annotated <- xcms.table %>% dplyr::rename(mz = mzmed, rt = rtmed) %>%
+  metid_annotate(polarity = "positive", omic = "lx")
+```
+
+The above process is repeated for the lipidomic negative mode, as well as the 
+metabolomic data collected from positive and negative mode.
+
+## LipidFinder filtering
+
+After data preprocessing with XCMS, [LipidFinder](https://www.lipidmaps.org/resources/tools/lipidfinder/) was used to normalise
 the data based on the blank solvent control. Lipidfinder is available
 both online and as python code. Instruction on installing the python
 code can be found in
@@ -103,7 +191,7 @@ lipidFinder.data <- bind_rows(lx_neg, lx_pos, mx_neg, mx_pos)
 head(lipidFinder.data)
 ```
 
-## Analytical Pipeline in MultiABLER
+## Data processing with MultiABLER
 
 After the data is imported, we can first extract the feature table from
 the additional information. We will then use the `tbManipulate` function
@@ -232,27 +320,6 @@ same median so that we can compare the value across different samples.
 ```{r}
 eigenMS.median.df <- eigenMS.df %>% group_modify(~normMedian(.x))
 head(eigenMS.median.df)
-```
-
-## Feature Annotation
-
-Feature annotation are typically performed based on the feature table
-optained from data preprocessor such as XCMS and MS-DIAL. There are many
-stand-alone metabolomic feature annotation available, however often not
-compatible with R. Some feature annotation programmes includes OpenMS
-(Röst et al., 2016), SIRIUS and CSI:FingerID (Rurik et al., 2020).
-However, while having a stand-alone annotation programme limits the
-ability of running a workflow on an unified pipeline, this also provides
-a greater flexibility in analysing the dataset, and matching the
-annotation programme that is suitable for the dataset. Here, we use
-[LipidMatch](https://innovativeomics.com/software/lipidmatch-modular-annotates-a-feature-table/)
-to annotate the lipidomic data. The lipidomic annotation can be found in
-`demo_data`. However, we are unable to annotate the differentially
-expressed metabolomic features.
-
-```{r, message=FALSE}
-lx.annotation <- read_csv("demo_data/Lx.annotation.csv")
-head(lx.annotation)
 ```
 
 ## Statistical analysis
