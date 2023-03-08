@@ -9,6 +9,27 @@ library(xcms)
 library(CAMERA)
 library(metid)
 
+#' Perform xcms analysis
+#'
+#' Perform XCMS analysis using XCMS and CAMERA
+#' XCMS parameters is provided by \link[xcms]{CentWaveParam}, \link[xcms]{ObiwarpParam}
+#'and \link[xcms]{PeakDensityParam}
+#' @param mzMLs list of mzML files
+#' @param sample.info data.frame containing sample information
+#' @param polarity polarity mode: accept Positive / Negative
+#' @param save.xdata boolean. If true, save xdata object in save.location. Default: FALSE
+#' @param save.location save location for xdata if save.xdata is true
+#' @param cwp \link[xcms]{CentWaveParam} object. Default: xcms::CentWaveParam(ppm = 10, snthr = 6, peakwidth = c(10, 60), mzdiff = 0.01, noise = 0, prefilter = c(3, 500))
+#' @param owp \link[xcms]{ObiwarpParam} object. Default: xcms::ObiwarpParam(binSize = 0.5)
+#' @param pdp \link[xcms]{PeakDensityParam} object. Default: xcms::PeakDensityParam(sampleGroups = sample.info$group, bw = 5, binSize = 0.025, minFraction = 0.5, minSamples = 1)
+#' @param camera.sigma sigma value for \link[CAMERA]{groupFWHM}. Default: 6
+#' @param camera.perfwhm perfwhm value for \link[CAMERA]{groupFWHM}. Default: 0.6
+#' @param camera.intval intval value for \link[CAMERA]{groupFWHM} and \link[CAMERA]{findIsotopes}. Default: "into"
+#' @param camera.ppm ppm value for \link[CAMERA]{findIsotopes}. Default: 10
+#' @param camera.mzabs mzabs value for \link[CAMERA]{findIsotopes}. Default: 0.015
+#' @param camera.maxcharge maxcharge value for \link[CAMERA]{findIsotopes}. Default: 3
+#' @param camera.maxiso maxiso value for \link[CAMERA]{findIsotopes}. Default: 5
+#' @return xcms aligned feature table
 #' @export
 runXCMS <- function (mzMLs, 
                      sample.info, 
@@ -135,6 +156,18 @@ runXCMS <- function (mzMLs,
   return(annotated.table)
 }
 
+#' Perform metID annotation
+#'
+#' Perform metID annotation using the mz values
+#' Default function can identify the metabolomic and lipidomic database
+#' is included in the package
+#' @param df feature table including the column mzmed and rtmed.
+#' @param polarity polarity mode: accept Positive / Negative
+#' @param omic omic the file belongs to: accept Mx / Lx
+#' @param database \link[metid]{databaseClass-class} object. User may leave it blank and the function will identify the correct database base on the omic argument automatically.
+#' @param ms1.match.ppm parameters for \link[metid]{identify_metabolites}. Default: 15
+#' @param rt.match.tol parameters for \link[metid]{identify_metabolites}. Default: 1000000
+#' @return list of annotation
 #' @export
 metid_annotate <- function (df, polarity, omic = "Mx", database = NA, ms1.match.ppm = 15,
                             rt.match.tol = 1000000) {
@@ -189,6 +222,11 @@ metid_annotate <- function (df, polarity, omic = "Mx", database = NA, ms1.match.
   return (annotate_table)
 }
 
+#' Write csv files for LipidFinder input
+#'
+#' Convert xcms feature table into LipidFinder readable input
+#' @param df xcms feature table
+#' @param file.name The file location
 #' @export
 write_lipidfinder_csv <- function(df, file.name) {
   lf_output <- df %>% replace(is.na(.), 0) %>%
@@ -196,16 +234,6 @@ write_lipidfinder_csv <- function(df, file.name) {
     dplyr::rename(FeatureID = Feature.ID)
   
   readr::write_csv(lf_output, file = file.name)
-}
-
-#' LipidFinder wrapper (check/install and run)
-#' @param input The input file location (output from write_lipidfinder_csv)
-#' @param output The output file location (input to read_LipidFinder_csv)
-#' @param json_param The requisite json parameter file 
-#' @export
-run_lipidfinder <- function(input, output, json_param) {
-# system('python -m pip install --upgrade LipidFinder-2.0.2-py3-none-any.whl')
-system('python run_peakfilter.py -i 'input' -o 'output' -p 'json_param'')
 }
 
 #' Read csv files from LipidFinder output
@@ -346,14 +374,31 @@ runLimma <- function(df, design.matrix, cont.matrix) {
     return(limma.summary)
 }
 
+#' Annotation feature helper function
+#'
+#' Helper function to rename the annotation feature output from metID (FT00000)
+#' into lipidfinder input format(LP00000).
+#' @param annotated.df The annotated feature data.frame from metid_annotate
+#' @param omic omic the file belongs to: accept Mx / Lx
+#' @param polarity polarity mode: accept Positive / Negative
+#' @return annotated.df with renamed feature name
 #' @export
 rename_annotation_feature <- function(annotated.df, omic, polarity) {
-  rename.df <- annotated.df %>% mutate(Omic = omic, Polarity = polarity, Feature.ID = str_replace(
+  rename.df <- annotated.df %>% mutate(Omic = omic, Polarity = polarity, Feature.ID = toupper(str_replace(
     Feature.ID, "FT", paste0(stringr::str_extract(Omic, "^(.)"),
-                             stringr::str_extract(Polarity, "^(.)"))))
+                             stringr::str_extract(Polarity, "^(.)")))))
   return(rename.df)
 }
 
+#' Group annotation
+#'
+#' Annotate feature table and identify unique peaks base on provided match.id
+#' Feature with the highest median across the sample will be used as the
+#' representative features of that match.id.
+#' @param df The normalised data.frame
+#' @param annotated.df Annotated data.frame containing feature ID and annotations
+#' @param match.id The column in annotated.df that is used as unique identifier. Default as HMDB.ID
+#' @return summarised data.frame with one entry per unique identifier.
 #' @export
 group_annotation <- function(df, annotated.df, match.id = "HMDB.ID") {
   if (!(match.id %in% colnames(annotated.df))) {
