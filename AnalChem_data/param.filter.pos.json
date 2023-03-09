@@ -1,0 +1,89 @@
+{
+    "polarity": "Positive",
+    "preprocSoftware": "XCMS",
+    "numSamples": 20,
+    "numTechReps": 1,
+    "firstSampleIndex": 4,
+    "mzCol": "mzmed",
+    "rtCol": "rtmed",
+    "timeUnit": "Seconds",
+    "mzFixedError": 0.0005,
+    "mzPPMError": 4.0,
+    "maxRTDiffAdjFrame": 0.3,
+    "numQCReps": 0,
+    "numSolventReps": 4,
+    "removeSolvents": true,
+    "solventMinFoldDiff": 3.0,
+    "intenSignifCutOff": 2000,
+    "removeIonFrags": true,
+    "posIonFragsCSVPath": "/Users/ianlee/opt/anaconda3/lib/python3.9/site-packages/LipidFinder/Data/ionfragments_positive.csv",
+    "removeContaminants": true,
+    "posContaminantsCSVPath": "/Users/ianlee/opt/anaconda3/lib/python3.9/site-packages/LipidFinder/Data/contaminants_positive.csv",
+    "removeAdducts": true,
+    "posAdductsCSVPath": "/Users/ianlee/opt/anaconda3/lib/python3.9/site-packages/LipidFinder/Data/adducts_positive.csv",
+    "posAdductsPairs": [
+        [
+            "M+H",
+            "M+Na"
+        ],
+        [
+            "M+H",
+            "M+K"
+        ],
+        [
+            "M+H",
+            "M+NH4"
+        ],
+        [
+            "M+H",
+            "2M+NH4"
+        ],
+        [
+            "M+H",
+            "2M+Na"
+        ],
+        [
+            "M+Na",
+            "M+K"
+        ],
+        [
+            "M+Na",
+            "2M+Na"
+        ],
+        [
+            "M+NH4",
+            "2M+NH4"
+        ]
+    ],
+    "adductAddition": false,
+    "removeStacks": true,
+    "stacksCSVPath": "/Users/ianlee/opt/anaconda3/lib/python3.9/site-packages/LipidFinder/Data/stacks.csv",
+    "maxStackGap": 3,
+    "lipidStackAddition": false,
+    "intenOutlierCutOff": 5000,
+    "intensityRSD": [
+        35,
+        40
+    ],
+    "correctRTMeans": true,
+    "featMassAssignment": false,
+    "outlierMinDiff": 1,
+    "minNonZeroPoints": 4,
+    "intenRSDCutOff": 30,
+    "rtSDCutOff": 2,
+    "removeIsotopes": true,
+    "numIsotopes": 4,
+    "isoIntensityCoef": [
+        0.7,
+        1.3
+    ],
+    "filterMassDefect": true,
+    "rtCutOff": 0.8,
+    "posMassDefectCSVPath": "/Users/ianlee/opt/anaconda3/lib/python3.9/site-packages/LipidFinder/Data/md_inclusion_positive.csv",
+    "mzDelta": 0.01,
+    "calculateFDR": true,
+    "rtRange": [
+        0,
+        60
+    ]
+}
