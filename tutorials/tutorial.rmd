@@ -1,10 +1,12 @@
 ---
 title: "Analytical Pipeline for LC-MS/MS Metabolomic Studies"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Analytical Pipeline for LC-MS/MS Metabolomic Studies}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+output:
+  html_document:
+    df_print: paged
+  rmarkdown::html_vignette: default
+  pdf_document: default
+vignette: |
+  %\VignetteIndexEntry{Analytical Pipeline for LC-MS/MS Metabolomic Studies} %\VignetteEncoding{UTF-8} %\VignetteEngine{knitr::rmarkdown}
 jupyter:
   celltoolbar: Tags
   kernelspec:
@@ -20,19 +22,19 @@ jupyter:
     version: 4.1.0
   nbformat: 4
   nbformat_minor: 5
-  toc-autonumbering: false
-  toc-showcode: true
-  toc-showmarkdowntxt: false
-  toc-showtags: false
-editor_options: 
-  markdown: 
+  toc-autonumbering: no
+  toc-showcode: yes
+  toc-showmarkdowntxt: no
+  toc-showtags: no
+editor_options:
+  markdown:
     wrap: 72
 ---
 
-```{r setup, echo = FALSE}
+```{r setup, echo = FALSE, warning=FALSE, message=FALSE}
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 knitr::opts_chunk$set(fig.width=16, fig.height=8, out.width="100%")
-
+devtools::load_all(".")
 ```
 
 ## Packages dependencies
@@ -55,8 +57,8 @@ Guides to install these packages can be found in the package's page. However, Mu
 ```{r}
 library(cowplot)
 library(tidyverse)
+library(xcms)
 library(MultiABLER)
-system('pip install LipidFinder-2.0.2-py3-none-any.whl')
 ```
 
 ## Data
@@ -71,8 +73,8 @@ TO process the data, raw LC-MS file is first converted into mzML using MSconvert
 LC-MS data preprocessing was performed with XCMS and CAMERA. To start analysis,
 we first read in the location, sample information, and mzML file location. Here,
 we use the lipidomic (Lx) positive mode as an example.
-```{r info eval=FALSE}
-data_dir = file.path("Talib_et_al")
+```{r info, warning=FALSE, message=FALSE}
+data_dir = file.path("AnalChem_data")
 sample.info = read_csv(file.path(data_dir, "sample.info.csv"))
 mzML_dir = file.path(data_dir, "mzML")
 
@@ -111,14 +113,14 @@ the parameters to adjust for their data. `camera.sigma`, `camera.perfwhm`
 and `camera.intval` is used in the function `CAMERA::groupFWHM`.
 `camera.intval`,`camera.ppm`,`camera.mzabs`,`camera.maxcharge`, and `camera.maxiso`
 are used in the function `CAMERA::findIsotopes`.
-```{r xcms eval=FALSE}
+```{r eval=FALSE}
 xcms.table <- runXCMS(mzMLs, 
                       sample.info = sample.info, 
                       polarity = "positive", 
                       pdp = pdp,
                       cwp = cwp,
                       owp = owp,
-                      save.location = file.path(mzML_dir, "xdata")
+                      save.location = file.path(mzML_dir, "xdata"),
                       save.xdata = TRUE,
                       camera.sigma = 6,
                       camera.perfwhm = 0.6,
@@ -132,7 +134,7 @@ xcms.table <- runXCMS(mzMLs,
 
 After xcms alignment, we can use the function `write_lipidfinder_csv` to
 save a csv for LipidFinder.
-```{r write-lipidfinder eval=FALSE}
+```{r, eval=FALSE}
 write_lipidfinder_csv(xcms.table, file.path(data_dir, "Lx_pos.csv"))
 ```
 
@@ -147,6 +149,10 @@ identified in the Human Metabolome Database (HMDB). User may use the parameters
 ```{r, eval=FALSE}
 annotated <- xcms.table %>% dplyr::rename(mz = mzmed, rt = rtmed) %>%
   metid_annotate(polarity = "positive", omic = "lx")
+```
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+annotated <- read_csv("AnalChem_data/annotation.csv")
 ```
 
 The above process is repeated for the lipidomic negative mode, as well as the 
@@ -164,16 +170,16 @@ for the module is setup using the `config_params.py` as described in the
 instruction of LipidFinder. The parameter json file can also be found in
 `demo_data`.
 
-`> run_peakfilter.py -i demo_data/Lx_pos.csv -o LipidFinder_lx_results -p demo_data/param.filter.demo.pos.json`
+`> run_peakfilter.py -i AnalChem_data/Lx_pos.csv -o AnalChem_data/LipidFinder_lx_results -p demo_data/param.filter.demo.pos.json`
 
-`> run_peakfilter.py -i demo_data/Lx_neg.csv -o LipidFinder_lx_results -p demo_data/param.filter.demo.neg.json`
+`> run_peakfilter.py -i AnalChem_data/Lx_neg.csv -o AnalChem_data/LipidFinder_lx_results -p demo_data/param.filter.demo.neg.json`
 
-`> run_peakfilter.py -i demo_data/Mx_pos.csv -o LipidFinder_mx_results -p demo_data/param.filter.demo.pos.json`
+`> run_peakfilter.py -i AnalChem_data/Mx_pos.csv -o AnalChem_data/LipidFinder_mx_results -p demo_data/param.filter.demo.pos.json`
 
-`> run_peakfilter.py -i demo_data/Mx_neg.csv -o LipidFinder_mx_results -p demo_data/param.filter.demo.neg.json`
+`> run_peakfilter.py -i AnalChem_data/Mx_neg.csv -o AnalChem_data/LipidFinder_mx_results -p demo_data/param.filter.demo.neg.json`
 
 After the clean up using LipidFinder, the data is imported to MultiABLER
-for further processing. We use the `read_LipidFindre_csv` function to
+for further processing. We use the `read_LipidFinder_csv` function to
 read the LipidFinder filtered result into MultiABLER. The omic argument
 is used to tag whether the feature table is lipidomic (Lx) or
 metabolomic (Mx). The file should be the output from LipidFinder,
@@ -182,10 +188,10 @@ and format the feature table. We can then use the `bind_rows` function
 from `dplyr` (part of `tidyverse`) to join the four feature tables.
 
 ```{r, message=FALSE}
-lx_neg <- read_LipidFinder_csv("LipidFinder_lx_results/peakfilter_negative_summary.csv", omic = "Lx")
-lx_pos <- read_LipidFinder_csv("LipidFinder_lx_results/peakfilter_positive_summary.csv", omic = "Lx")
-mx_neg <- read_LipidFinder_csv("LipidFinder_mx_results/peakfilter_negative_summary.csv", omic = "Mx")
-mx_pos <- read_LipidFinder_csv("LipidFinder_mx_results/peakfilter_positive_summary.csv", omic = "Mx")
+lx_neg <- read_LipidFinder_csv("AnalChem_data/LipidFinder_lx_results/peakfilter_negative_summary.csv", omic = "Lx")
+lx_pos <- read_LipidFinder_csv("AnalChem_data/LipidFinder_lx_results/peakfilter_positive_summary.csv", omic = "Lx")
+mx_neg <- read_LipidFinder_csv("AnalChem_data/LipidFinder_mx_results/peakfilter_negative_summary.csv", omic = "Mx")
+mx_pos <- read_LipidFinder_csv("AnalChem_data/LipidFinder_mx_results/peakfilter_positive_summary.csv", omic = "Mx")
 
 lipidFinder.data <- bind_rows(lx_neg, lx_pos, mx_neg, mx_pos)
 head(lipidFinder.data)
@@ -199,10 +205,10 @@ of `MultiABLER` to filter, impute and transform the feature table. We
 will also read in the sample information provided in `demo_data`.
 
 ```{r, message=FALSE}
-lipidFinder.data <- lipidFinder.data %>% na_if(0)
-feature.info <- lipidFinder.data %>% select(Omic, Polarity, FeatureID, mzmed, rtmed)
+lipidFinder.data <- lipidFinder.data %>% mutate(across(where(is.numeric), ~na_if(.,0)))
+feature.info <- lipidFinder.data %>% select(Omic, Polarity, Feature.ID, mzmed, rtmed)
 feature.df <- lipidFinder.data %>% select(-mzmed, -rtmed)
-sample.info <- read_csv("demo_data/sample.info.csv")
+sample.only.info <- sample.info %>% filter(group == "sample") %>% select(-group)
 
 head(feature.df)
 ```
@@ -269,7 +275,7 @@ set.seed(200)
 ```
 
 ```{r, warning=FALSE, message=FALSE, fig.show='hide', fig.keep = 'none'}
-eigenMS.df <- mani.df %>% group_modify(~normEigenMS(.x, rename(sample.info, group = Label)))
+eigenMS.df <- mani.df %>% group_by(Omic, Polarity) %>% group_modify(~normEigenMS(.x, dplyr::rename(sample.only.info, group = Label)))
 head(eigenMS.df)
 ```
 
@@ -284,10 +290,10 @@ plaque) are closer to each other than the leison-free data, suggesting
 the difference between the grouping is real.
 
 ```{r}
-p1 <- stack(mani.df %>% ungroup() %>% select(-Omic, -Polarity, -FeatureID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
+p1 <- stack(mani.df %>% ungroup() %>% select(-Omic, -Polarity, -Feature.ID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
 ggplot(aes(x = ind, y = values, color = Label)) + geom_boxplot() +
 ggtitle("Before normalisation") + theme(axis.text.x = element_blank()) + xlab("sample")
-p2 <- stack(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity, -FeatureID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
+p2 <- stack(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity, -Feature.ID)) %>% inner_join(sample.info, by = c("ind" = "sample")) %>% 
 ggplot(aes(x = ind, y = values, color = Label)) + geom_boxplot() +
 ggtitle("After normalisation") + theme(axis.text.x = element_blank()) + xlab("sample")
 
@@ -295,8 +301,8 @@ cowplot::plot_grid(p1, p2, nrow = 1)
 ```
 
 ```{r}
-before.norm <- prcomp(t(mani.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("FeatureID")), scale = TRUE)
-after.norm <- prcomp(t(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("FeatureID")), scale = TRUE)
+before.norm <- prcomp(t(mani.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("Feature.ID")), scale = TRUE)
+after.norm <- prcomp(t(eigenMS.df %>% ungroup() %>% select(-Omic, -Polarity) %>% column_to_rownames("Feature.ID")), scale = TRUE)
 
 before.norm.df <- data.frame(before.norm$x)
 before.norm.df$sample <- rownames(before.norm.df)
@@ -321,23 +327,36 @@ same median so that we can compare the value across different samples.
 eigenMS.median.df <- eigenMS.df %>% group_modify(~normMedian(.x))
 head(eigenMS.median.df)
 ```
+Finally, we use the annotation from the previous step to identify unique metabolites
+in our data using `group_annotation`. For each metabolite, the function will use the
+features that contain the largest median intensity as the representative of that feature.
+User can change the `match.id` argument to specify which column in the annotation table
+should the function use as unique feature ID.
+```{r}
+group.feature.table <- group_annotation(eigenMS.median.df,
+                                        annotated,
+                                        match.id = "HMDB.ID")
+head(group.feature.table)
+```
 
-## Statistical analysis
+## Demonstration on Statistical analysis
 
 Statistical analysis is performed on the normalised feature table. Here,
 we presented differential analysis using the `limma` package. However,
 there are other statistical analysis could be performed, such as network
 analysis and marker identification, with the annotated normalised
-feature table.
+feature table, or dimension reduction method using sparse partial least squares projection (sPLS), and regularised canonical correlation analysis (rCCA) using mixOmics[2].
 
 ```{r}
-label <- as.factor(sample.info$Label)
+label <- as.factor(sample.only.info$Label)
 design <- model.matrix(~ label)
 colnames(design)[1] <- "Intercept"
 
 cont.matrix <- limma::makeContrasts(NLvL = -labelNL, levels = design)
 
-limma.result <- eigenMS.median.df %>% group_by(Omic, Polarity) %>% group_modify(~runLimma(.x, design.matrix = design, cont.matrix = cont.matrix)) %>% ungroup()
+annotated.feature.info <- group.feature.table %>% select(Omic, Feature.ID = HMDB.ID)
+
+limma.result <- group.feature.table %>% select(-Omic) %>% dplyr::rename(Feature.ID = HMDB.ID) %>% runLimma(design.matrix = design, cont.matrix = cont.matrix)
 head(limma.result)
 ```
 
@@ -345,11 +364,18 @@ Finally, we can plot the differential analysis result using the output
 from Limma.
 
 ```{r}
-limma.result %>% ggplot(aes(logFC.NLvL, -log10(adj.P.Val.NLvL))) + geom_point() + facet_wrap(~Omic) +
+limma.result %>% inner_join(annotated.feature.info, by = "Feature.ID") %>% ggplot(aes(logFC.NLvL, -log10(adj.P.Val.NLvL))) + geom_point(color = "grey") + 
+  geom_point(data = . %>% filter(abs(logFC.NLvL) > 1, adj.P.Val.NLvL < 0.05), aes(color = Omic)) +
 xlab("logFC") + ylab("-log10(p)") + geom_hline(yintercept = -log10(0.05), lty = "dashed") +
 geom_vline(xintercept = c(-1,1), lty = "dashed") +
 ggtitle("Differential analysis")
 ```
+
+## Reference
+
+[1] Talib, J., Hains, P. G., Tumanov, S., Hodson, M. P., Robinson, P. J., & Stocker, R. (2019). Barocycler-Based Concurrent Multiomics Method To Assess Molecular Changes Associated with Atherosclerosis Using Small Amounts of Arterial Tissue from a Single Mouse. *Analytical Chemistry*, *91*(20), 12670–9. 
+
+[2] Lê Cao, K.-A., González, I., & Déjean, S. (2009). integrOmics: An R package to unravel relationships between two omics datasets. *Bioinformatics*, *25*(21), 2855–6.
 
 ## Session Info
 ```{r}

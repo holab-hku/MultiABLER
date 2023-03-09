@@ -1,0 +1,25 @@
+sample,Label,"Biomass, mg",group
+L1,L,2,sample
+L2,L,1.8,sample
+L3,L,1.6,sample
+L4,L,2.1,sample
+L5,L,2.8,sample
+L6,L,3,sample
+L7,L,3.9,sample
+L8,L,3.9,sample
+L9,L,4.5,sample
+NL1,NL,3.8,sample
+NL2,NL,2.8,sample
+NL3,NL,1.4,sample
+NL4,NL,2.3,sample
+NL5,NL,3.3,sample
+NL6,NL,1.7,sample
+NL7,NL,1.3,sample
+NL8,NL,1.7,sample
+NL9,NL,1.5,sample
+NL10,NL,2.2,sample
+NL11,NL,1.5,sample
+PB1,PB,,blank
+PB2,PB,,blank
+PB3,PB,,blank
+PB4,PB,,blank
